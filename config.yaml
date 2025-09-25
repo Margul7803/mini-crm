@@ -1,0 +1,3 @@
+storage:
+  type: gorm
+  path: contacts.db
