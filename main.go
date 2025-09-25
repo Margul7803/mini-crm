@@ -1,156 +1,246 @@
 package main
 
 import (
-    "bufio"
-    "flag"
-    "fmt"
-    "os"
-    "strconv"
-    "strings"
+	"bufio"
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"strconv"
+	"strings"
+
+	"mini-crm/store"
 )
+
+var dataStore store.Storer
 
 // Fonction pour le mode interactif
 func startInteractiveMode() {
-    reader := bufio.NewReader(os.Stdin)
+	reader := bufio.NewReader(os.Stdin)
 
-    for {
-        fmt.Println("\n--- Mini-CRM (Mode Interactif) ---")
-        fmt.Println("1. Ajouter un contact")
-        fmt.Println("2. Lister tous les contacts")
-        fmt.Println("3. Chercher un contact par ID")
-        fmt.Println("4. Mettre à jour un contact")
-        fmt.Println("5. Supprimer un contact")
-        fmt.Println("6. Quitter")
-        fmt.Print("Choisissez une option : ")
+	for {
+		fmt.Println("\n--- Mini-CRM (Mode Interactif) ---")
+		fmt.Println("1. Ajouter un contact")
+		fmt.Println("2. Lister tous les contacts")
+		fmt.Println("3. Chercher un contact par ID")
+		fmt.Println("4. Mettre à jour un contact")
+		fmt.Println("5. Supprimer un contact")
+		fmt.Println("6. Quitter")
+		fmt.Print("Choisissez une option : ")
 
-        choiceStr, _ := reader.ReadString('\n')
-        choice, err := strconv.Atoi(strings.TrimSpace(choiceStr))
-        if err != nil {
-            fmt.Println("Veuillez entrer un nombre valide")
-            continue
-        }
+		choiceStr, _ := reader.ReadString('\n')
+		choice, err := strconv.Atoi(strings.TrimSpace(choiceStr))
+		if err != nil {
+			fmt.Println("Veuillez entrer un nombre valide")
+			continue
+		}
 
-        switch choice {
-        case 1: // Ajouter
-            fmt.Print("ID: ")
-            idStr, _ := reader.ReadString('\n')
-            id, _ := strconv.Atoi(strings.TrimSpace(idStr))
+		switch choice {
+		case 1: // Ajouter
+			fmt.Print("Nom: ")
+			nom, _ := reader.ReadString('\n')
 
-            fmt.Print("Nom: ")
-            nom, _ := reader.ReadString('\n')
+			fmt.Print("Email: ")
+			email, _ := reader.ReadString('\n')
 
-            fmt.Print("Email: ")
-            email, _ := reader.ReadString('\n')
+			contact := store.Contact{
+				Nom:   strings.TrimSpace(nom),
+				Email: strings.TrimSpace(email),
+			}
+			if err := dataStore.Add(contact); err != nil {
+				fmt.Println("Erreur lors de l'ajout du contact:", err)
+			} else {
+				fmt.Println("Contact ajouté !")
+			}
 
-            ajouterContact(id, strings.TrimSpace(nom), strings.TrimSpace(email))
+		case 2: // Lister
+			contacts, err := dataStore.GetAll()
+			if err != nil {
+				fmt.Println("Erreur lors de la récupération des contacts:", err)
+				continue
+			}
+			fmt.Println("--- Liste des contacts ---")
+			if len(contacts) == 0 {
+				fmt.Println("Aucun contact trouvé.")
+				continue
+			}
+			for _, c := range contacts {
+				fmt.Printf("ID: %d, Nom: %s, Email: %s\n", c.ID, c.Nom, c.Email)
+			}
 
-        case 2: // Lister
-            listerContacts()
+		case 3: // Chercher
+			fmt.Print("Entrez l'ID du contact : ")
+			idStr, _ := reader.ReadString('\n')
+			id, _ := strconv.Atoi(strings.TrimSpace(idStr))
+			contact, err := dataStore.Get(uint(id))
+			if err != nil {
+				fmt.Println("Contact non trouvé.")
+			} else {
+				fmt.Printf("ID: %d, Nom: %s, Email: %s\n", contact.ID, contact.Nom, contact.Email)
+			}
 
-        case 3: // Chercher
-            fmt.Print("Entrez l'ID du contact : ")
-            idStr, _ := reader.ReadString('\n')
-            id, _ := strconv.Atoi(strings.TrimSpace(idStr))
-            chercherContact(id)
+		case 4: // Mettre à jour
+			fmt.Print("Entrez l'ID du contact à mettre à jour : ")
+			idStr, _ := reader.ReadString('\n')
+			id, _ := strconv.Atoi(strings.TrimSpace(idStr))
 
-        case 4: // Mettre à jour
-            fmt.Print("Entrez l'ID du contact à mettre à jour : ")
-            idStr, _ := reader.ReadString('\n')
-            id, _ := strconv.Atoi(strings.TrimSpace(idStr))
+			contact, err := dataStore.Get(uint(id))
+			if err != nil {
+				fmt.Println("Contact non trouvé.")
+				continue
+			}
 
-            fmt.Print("Nouveau nom (laisser vide pour garder actuel) : ")
-            nom, _ := reader.ReadString('\n')
+			fmt.Print("Nouveau nom (laisser vide pour garder actuel) : ")
+			nom, _ := reader.ReadString('\n')
+			nom = strings.TrimSpace(nom)
 
-            fmt.Print("Nouvel email (laisser vide pour garder actuel) : ")
-            email, _ := reader.ReadString('\n')
+			fmt.Print("Nouvel email (laisser vide pour garder actuel) : ")
+			email, _ := reader.ReadString('\n')
+			email = strings.TrimSpace(email)
 
-            mettreAJourContact(id, strings.TrimSpace(nom), strings.TrimSpace(email))
+			if nom != "" {
+				contact.Nom = nom
+			}
 
-        case 5: // Supprimer
-            fmt.Print("Entrez l'ID du contact à supprimer : ")
-            idStr, _ := reader.ReadString('\n')
-            id, _ := strconv.Atoi(strings.TrimSpace(idStr))
-            supprimerContact(id)
+			if email != "" {
+				contact.Email = email
+			}
 
-        case 6: // Quitter
-            fmt.Println("Au revoir !")
-            return
+			if err := dataStore.Update(contact); err != nil {
+				fmt.Println("Erreur lors de la mise à jour du contact:", err)
+			} else {
+				fmt.Println("Contact mis à jour !")
+			}
 
-        default:
-            fmt.Println("Option invalide")
-        }
-    }
+		case 5: // Supprimer
+			fmt.Print("Entrez l'ID du contact à supprimer : ")
+			idStr, _ := reader.ReadString('\n')
+			id, _ := strconv.Atoi(strings.TrimSpace(idStr))
+			if err := dataStore.Delete(uint(id)); err != nil {
+				fmt.Println("Erreur lors de la suppression du contact:", err)
+			} else {
+				fmt.Println("Contact supprimé !")
+			}
+
+		case 6: // Quitter
+			fmt.Println("Au revoir !")
+			return
+
+		default:
+			fmt.Println("Option invalide")
+		}
+	}
 }
 
 func main() {
-    if err := loadContacts(); err != nil {
-        fmt.Println("Erreur lors du chargement des contacts:", err)
-        os.Exit(1)
-    }
+	var err error
+	dataStore, err = store.NewGORMStore("contacts.db")
+	if err != nil {
+		log.Fatal("Erreur lors de la création du GORMStore:", err)
+	}
 
-    // Si aucun argument n'est passé, lancer le mode interactif
-    if len(os.Args) < 2 {
-        startInteractiveMode()
-        return
-    }
+	// Si aucun argument n'est passé, lancer le mode interactif
+	if len(os.Args) < 2 {
+		startInteractiveMode()
+		return
+	}
 
-    // Sinon, utiliser la logique des flags
-    addCmd := flag.NewFlagSet("add", flag.ExitOnError)
-    addId := addCmd.Int("id", 0, "ID du contact")
-    addNom := addCmd.String("nom", "", "Nom du contact")
-    addEmail := addCmd.String("email", "", "Email du contact")
+	// Sinon, utiliser la logique des flags
+	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
+	addNom := addCmd.String("nom", "", "Nom du contact")
+	addEmail := addCmd.String("email", "", "Email du contact")
 
-    listCmd := flag.NewFlagSet("list", flag.ExitOnError)
+	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
 
-    searchCmd := flag.NewFlagSet("search", flag.ExitOnError)
-    searchId := searchCmd.Int("id", 0, "ID du contact à chercher")
+	searchCmd := flag.NewFlagSet("search", flag.ExitOnError)
+	searchId := searchCmd.Int("id", 0, "ID du contact à chercher")
 
-    updateCmd := flag.NewFlagSet("update", flag.ExitOnError)
-    updateId := updateCmd.Int("id", 0, "ID du contact à mettre à jour")
-    updateNom := updateCmd.String("nom", "", "Nouveau nom du contact")
-    updateEmail := updateCmd.String("email", "", "Nouvel email du contact")
+	updateCmd := flag.NewFlagSet("update", flag.ExitOnError)
+	updateId := updateCmd.Int("id", 0, "ID du contact à mettre à jour")
+	updateNom := updateCmd.String("nom", "", "Nouveau nom du contact")
+	updateEmail := updateCmd.String("email", "", "Nouvel email du contact")
 
-    deleteCmd := flag.NewFlagSet("delete", flag.ExitOnError)
-    deleteId := deleteCmd.Int("id", 0, "ID du contact à supprimer")
+	deleteCmd := flag.NewFlagSet("delete", flag.ExitOnError)
+	deleteId := deleteCmd.Int("id", 0, "ID du contact à supprimer")
 
-
-    switch os.Args[1] {
-    case "add":
-        addCmd.Parse(os.Args[2:])
-        if *addId == 0 || *addNom == "" || *addEmail == "" {
-            fmt.Println("Les flags -id, -nom et -email sont requis pour ajouter un contact.")
-            addCmd.Usage()
-            return
-        }
-        ajouterContact(*addId, *addNom, *addEmail)
-    case "list":
-        listCmd.Parse(os.Args[2:])
-        listerContacts()
-    case "search":
-        searchCmd.Parse(os.Args[2:])
-        if *searchId == 0 {
-            fmt.Println("Le flag -id est requis pour chercher un contact.")
-            searchCmd.Usage()
-            return
-        }
-        chercherContact(*searchId)
-    case "update":
-        updateCmd.Parse(os.Args[2:])
-        if *updateId == 0 {
-            fmt.Println("Le flag -id est requis pour mettre à jour un contact.")
-            updateCmd.Usage()
-            return
-        }
-        mettreAJourContact(*updateId, *updateNom, *updateEmail)
-    case "delete":
-        deleteCmd.Parse(os.Args[2:])
-        if *deleteId == 0 {
-            fmt.Println("Le flag -id est requis pour supprimer un contact.")
-            deleteCmd.Usage()
-            return
-        }
-        supprimerContact(*deleteId)
-    default:
-        fmt.Println("Commande inconnue. Commandes disponibles: add, list, search, update, delete")
-    }
+	switch os.Args[1] {
+	case "add":
+		addCmd.Parse(os.Args[2:])
+		if *addNom == "" || *addEmail == "" {
+			fmt.Println("Les flags -nom et -email sont requis pour ajouter un contact.")
+			addCmd.Usage()
+			return
+		}
+		contact := store.Contact{Nom: *addNom, Email: *addEmail}
+		if err := dataStore.Add(contact); err != nil {
+			fmt.Println("Erreur lors de l'ajout du contact:", err)
+		} else {
+			fmt.Println("Contact ajouté !")
+		}
+	case "list":
+		listCmd.Parse(os.Args[2:])
+		contacts, err := dataStore.GetAll()
+		if err != nil {
+			fmt.Println("Erreur lors de la récupération des contacts:", err)
+			return
+		}
+		fmt.Println("--- Liste des contacts ---")
+		if len(contacts) == 0 {
+			fmt.Println("Aucun contact trouvé.")
+			return
+		}
+		for _, c := range contacts {
+			fmt.Printf("ID: %d, Nom: %s, Email: %s\n", c.ID, c.Nom, c.Email)
+		}
+	case "search":
+		searchCmd.Parse(os.Args[2:])
+		if *searchId == 0 {
+			fmt.Println("Le flag -id est requis pour chercher un contact.")
+			searchCmd.Usage()
+			return
+		}
+		contact, err := dataStore.Get(uint(*searchId))
+		if err != nil {
+			fmt.Println("Contact non trouvé.")
+		} else {
+			fmt.Printf("ID: %d, Nom: %s, Email: %s\n", contact.ID, contact.Nom, contact.Email)
+		}
+	case "update":
+		updateCmd.Parse(os.Args[2:])
+		if *updateId == 0 {
+			fmt.Println("Le flag -id est requis pour mettre à jour un contact.")
+			updateCmd.Usage()
+			return
+		}
+		contact, err := dataStore.Get(uint(*updateId))
+		if err != nil {
+			fmt.Println("Contact non trouvé.")
+			return
+		}
+		if *updateNom != "" {
+			contact.Nom = *updateNom
+		}
+		if *updateEmail != "" {
+			contact.Email = *updateEmail
+		}
+		if err := dataStore.Update(contact); err != nil {
+			fmt.Println("Erreur lors de la mise à jour du contact:", err)
+		} else {
+			fmt.Println("Contact mis à jour !")
+		}
+	case "delete":
+		deleteCmd.Parse(os.Args[2:])
+		if *deleteId == 0 {
+			fmt.Println("Le flag -id est requis pour supprimer un contact.")
+			deleteCmd.Usage()
+			return
+		}
+		if err := dataStore.Delete(uint(*deleteId)); err != nil {
+			fmt.Println("Erreur lors de la suppression du contact:", err)
+		} else {
+			fmt.Println("Contact supprimé !")
+		}
+	default:
+		fmt.Println("Commande inconnue. Commandes disponibles: add, list, search, update, delete")
+	}
 }
